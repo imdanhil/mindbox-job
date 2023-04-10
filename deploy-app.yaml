@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-app
+  labels:
+    app: nginx-app
+spec:
+  replicas: 4 # Количество репликованных подов
+  selector:
+    matchLabels:
+      app: nginx-app
+  template:
+    metadata:
+      labels:
+        app: nginx-app
+    spec:
+      containers:
+      - name: nginx-app
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "0.5" # Лимит потребляемых ресурсов CPU для каждого пода
+            memory: "128Mi" # Фиксированный лимит потребляемой памяти для каждого пода
+          requests:
+            cpu: "0.1" # Запрашиваемые ресурсы CPU для каждого пода в момент запуска
+            memory: "128Mi" # Запрашиваемая фиксированная память для каждого пода
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  namespace: default
+  name: nginx-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-app
+  minReplicas: 4 # Минимальное количество реплик
+  maxReplicas: 12 # Максимальное количество реплик
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50 # Целевое значение загрузки CPU в процентах для каждого пода
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 180 # Время ожидания, перед тем как снижать количество реплик
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  namespace: default
+  name: nginx-app-cronjob
+spec:
+  schedule: "0 0 * * *" # Cron-расписание для запуска Job
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: nginx-app-cronjob
+        spec:
+          containers:
+          - name: nginx-app-cronjob
+            image: busybox
+            args: ['/bin/sh', '-c', 'echo "Running nginx-app-cronjob"']
+          restartPolicy: OnFailure # Политика перезапуска Job в случае ошибки
